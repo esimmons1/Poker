@@ -55,6 +55,14 @@ function PokerGame() {
   const [aiHands, setAiHands] = React.useState([[], []]);
   const [community, setCommunity] = React.useState([]);
   const [winner, setWinner] = React.useState("");
+  const [showdownDone, setShowdownDone] = React.useState(false);
+
+  const [playerChips, setPlayerChips] = React.useState(1000);
+  const [aiChips, setAiChips] = React.useState([1000, 1000]);
+  const [currentBet, setCurrentBet] = React.useState(0);
+  const [playerBet, setPlayerBet] = React.useState(0);
+  const [aiBets, setAiBets] = React.useState([0, 0]);
+  const [pot, setPot] = React.useState(0);
 
   function dealInitialHands() {
     const newDeck = shuffle(createDeck());
@@ -66,28 +74,36 @@ function PokerGame() {
     setAiHands([ai1, ai2]);
     setCommunity([]);
     setWinner("");
+    setShowdownDone(false);
+    setCurrentBet(0);
+    setPlayerBet(0);
+    setAiBets([0, 0]);
+    setPot(0);
   }
 
   function dealFlop() {
-    setCommunity([deck.pop(), deck.pop(), deck.pop()]);
-    setDeck(deck);
+    if (deck.length < 3) return;
+    setCommunity([deck[deck.length-1], deck[deck.length-2], deck[deck.length-3]]);
+    setDeck(deck.slice(0, deck.length-3));
   }
 
   function dealTurn() {
-    setCommunity([...community, deck.pop()]);
-    setDeck(deck);
+    if (deck.length < 1) return;
+    setCommunity([...community, deck[deck.length-1]]);
+    setDeck(deck.slice(0, deck.length-1));
   }
 
   function dealRiver() {
-    setCommunity([...community, deck.pop()]);
-    setDeck(deck);
+    if (deck.length < 1) return;
+    setCommunity([...community, deck[deck.length-1]]);
+    setDeck(deck.slice(0, deck.length-1));
   }
 
   function showdown() {
     const playerBest = evaluateHand([...playerHand, ...community]);
     const aiBest = aiHands.map(ai => evaluateHand([...ai, ...community]));
 
-    let results = [
+    const results = [
       { name: "You", hand: playerBest },
       { name: "AI 1", hand: aiBest[0] },
       { name: "AI 2", hand: aiBest[1] },
@@ -98,29 +114,101 @@ function PokerGame() {
       "Straight","Flush","Full House","Four of a Kind","Straight Flush"
     ];
 
-    results.sort((a,b)=>handRanks.indexOf(b.hand)-handRanks.indexOf(a.hand));
+    results.sort((a,b) => handRanks.indexOf(b.hand) - handRanks.indexOf(a.hand));
     setWinner(`${results[0].name} wins with ${results[0].hand}`);
+    setShowdownDone(true);
+
+    // Pay pot to winner
+    if (results[0].name === "You") {
+      setPlayerChips(playerChips + pot);
+    } else if (results[0].name === "AI 1") {
+      setAiChips([aiChips[0] + pot, aiChips[1]]);
+    } else {
+      setAiChips([aiChips[0], aiChips[1] + pot]);
+    }
+    setPot(0);
+  }
+
+  function calcWinProbability() {
+    if (!community.length) return "N/A";
+    const ranks = [
+      "High Card","Pair","Two Pair","Three of a Kind",
+      "Straight","Flush","Full House","Four of a Kind","Straight Flush"
+    ];
+    const playerRank = ranks.indexOf(evaluateHand([...playerHand, ...community]));
+    let betterAIs = 0;
+    aiHands.forEach(ai => {
+      const aiRank = ranks.indexOf(evaluateHand([...ai, ...community]));
+      if (aiRank > playerRank) betterAIs++;
+    });
+    const prob = ((2 - betterAIs) / 2) * 100;
+    return prob.toFixed(0) + "%";
+  }
+
+  function playerBetAmount(amount) {
+    if (amount > playerChips) return;
+    setPlayerBet(amount);
+    setPlayerChips(playerChips - amount);
+
+    // AI calls bet
+    const newAiBets = aiBets.map((bet, i) => {
+      const aiCall = Math.min(amount, aiChips[i]);
+      aiChips[i] -= aiCall;
+      return bet + aiCall;
+    });
+
+    setAiBets(newAiBets);
+    setAiChips([...aiChips]);
+    setPot(pot + amount + newAiBets.reduce((a,b) => a+b,0));
+    setCurrentBet(amount);
   }
 
   return (
     <div>
       <h2>Your Hand</h2>
-      {playerHand.map((c,i)=><span key={i} className="card"><img src={getCardImageUrl(c)} /></span>)}
+      {playerHand.map((c,i) => (
+        <span key={i} className="card"><img src={getCardImageUrl(c)} /></span>
+      ))}
+
       <h2>Community Cards</h2>
-      {community.map((c,i)=><span key={i} className="card"><img src={getCardImageUrl(c)} /></span>)}
+      {community.map((c,i) => (
+        <span key={i} className="card"><img src={getCardImageUrl(c)} /></span>
+      ))}
+
       <h2>AI Players</h2>
       {aiHands.map((hand, idx) => (
         <div key={idx}>
-          AI {idx+1}: {hand.map((c,i)=><span key={i} className="card"><img src="https://deckofcardsapi.com/static/img/back.png" /></span>)}
+          AI {idx+1}: {
+            showdownDone
+              ? hand.map((c,i) => <span key={i} className="card"><img src={getCardImageUrl(c)} /></span>)
+              : hand.map((c,i) => <span key={i} className="card"><img src="https://deckofcardsapi.com/static/img/back.png" /></span>)
+          }
         </div>
       ))}
-      <div style={{ margin: '10px' }}>
+
+      <h3>Pot: ${pot}</h3>
+      <h3>Your chips: ${playerChips}</h3>
+      <h3>AI chips: AI 1: ${aiChips[0]}, AI 2: ${aiChips[1]}</h3>
+
+      <div>
         <button onClick={dealInitialHands}>New Round</button>
         <button onClick={dealFlop}>Flop</button>
         <button onClick={dealTurn}>Turn</button>
         <button onClick={dealRiver}>River</button>
         <button onClick={showdown}>Showdown</button>
       </div>
+
+      <div style={{ marginTop: '10px' }}>
+        <h3>Place Bet</h3>
+        {[10, 50, 100].map(amt => (
+          <button key={amt} onClick={() => playerBetAmount(amt)} disabled={playerChips < amt}>
+            Bet ${amt}
+          </button>
+        ))}
+      </div>
+
+      <h3>Winning Probability: {calcWinProbability()}</h3>
+
       {winner && <h3>{winner}</h3>}
     </div>
   );
