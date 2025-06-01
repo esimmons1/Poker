@@ -38,7 +38,7 @@ Stuff you can change:
 Play it live:
 --------------
 Poker Game available at:  
-https://esimmons1.github.io/poker
+[https://esimmons1.github.io/poker](https://esimmons1.github.io/Poker/)
 
 ---
 As usual, if you're going to use or tweak it, at least credit me please. Thanks for reading and have fun playing.
